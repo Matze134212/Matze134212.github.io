@@ -272,8 +272,8 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
         </button>
       </div>
       <button class="btn light full" id="bLive" style="margin-top:10px">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10M7 12h7M7 15h9"/></svg>
-        <span>Live-Scan (iPhone „Text scannen“)</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14h10"/></svg>
+        <span>Nummer eintippen</span>
       </button>
       <input type="file" id="photoIn" accept="image/*" capture="environment" class="hidden">
       <div class="busy" id="busy"><div class="spin"></div><span id="busyText"></span></div>
@@ -301,7 +301,6 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
         <button class="btn primary" type="submit">Prüfen</button>
       </form>
       <div class="tips">
-        <p><b>Live-Scan:</b> Knopf „Live-Scan“ tippen, dann in der Tastatur auf das Symbol <b>„Text scannen“</b> (eckige Klammern mit Linien) – oder ins Feld tippen und lange drücken → „Text scannen“. Kamera auf die Artikelnummer halten und <b>„Einsetzen“</b> tippen. Die App prüft dann automatisch.</p>
         <p><b>Handscanner:</b> Bluetooth-Barcodescanner mit dem iPhone koppeln und einfach scannen – die App erkennt den Code automatisch und prüft sofort. <span id="scanState"></span></p>
       </div>
     </div>
@@ -997,7 +996,6 @@ $('#bLive').addEventListener('click', () => {
   stopScan(); $('#picks').classList.add('hidden');
   const f = $('#manualIn'); f.value = ''; f.focus();
   f.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  toast('Jetzt in der Tastatur auf „Text scannen“ tippen');
 });
 // Text, der auf einen Schlag eingefügt wird (Live-Text, Einfügen), sofort prüfen – normales Tippen nicht
 let autoTimer = null;
@@ -1380,12 +1378,6 @@ function applyState(d){
     $('#saveInfo').textContent = 'Gespeichert in deinem Claude-Konto (privat, nur für dich lesbar) – bleibt auch nach dem Schließen erhalten.';
   } catch {}
 })();
-
-/* ---------- Eigener Webspace: Live-Scanner vorhanden → iPhone-„Text scannen“ ausblenden ---------- */
-if (!window.claude?.use){
-  $('#bLive').classList.add('hidden');
-  const tip = [...document.querySelectorAll('.tips p')].find(x => x.textContent.startsWith('Live-Scan')); if (tip) tip.remove();
-}
 
 /* ---------- Claude-Seite: keine Live-Kamera, Foto-Funktion bleibt ---------- */
 if (window.claude?.use){
