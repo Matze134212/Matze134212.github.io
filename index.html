@@ -187,6 +187,16 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:#0e1630;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:.25s;z-index:60;max-width:calc(100% - 32px);pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .hidden{display:none!important}
+.psa{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.psa div{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:10px;font-size:13.5px;font-weight:650;line-height:1.25}
+.psa span{font-size:26px;line-height:1;flex:none}
+.torch{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;display:grid;place-items:center;cursor:pointer;z-index:2}
+.torch.on{background:#facc15;color:#111}
+.torch svg{width:22px;height:22px}
+.fc-count{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 10px}
+.fc-count div{background:var(--surface-2);border-radius:12px;padding:10px;text-align:center;font-size:12.5px;color:var(--muted)}
+.fc-count b{display:block;font-size:24px;color:var(--text);font-variant-numeric:tabular-nums}
+.fc-count .g b{color:var(--ok)} .fc-count .r b{color:var(--no)}
 .ask{position:fixed;inset:0;z-index:70;background:rgba(10,15,25,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))}
 .ask[hidden]{display:none}
 .askbox{background:var(--surface);color:var(--text);border-radius:20px;padding:20px 16px 16px;width:100%;max-width:520px;box-shadow:0 10px 40px rgba(0,0,0,.3)}
@@ -221,6 +231,7 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
         <video id="video" playsinline muted></video>
         <div class="frame"></div><div class="laser"></div>
         <div class="hint">Barcode in den Rahmen halten</div>
+        <button class="torch hidden" id="bTorch" type="button" aria-label="Taschenlampe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8l-1 6H9z"/><path d="M9 8h6v4l-1.5 2v8h-3v-8L9 12z"/></svg></button>
         <div class="idle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8M10 8v8M13 8v8M16.5 8v8"/></svg>
           <div>Kamera ist aus</div>
@@ -246,6 +257,16 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
         <p class="sub" style="margin:0 0 4px">Mehrere Nummern erkannt – bitte die richtige antippen:</p>
         <div class="list" id="pickList"></div>
       </div>
+    </div>
+
+    <div class="card" id="fcCard">
+      <h2>Fahrzeug-Check</h2>
+      <p class="sub" id="fcSub">Mehrere Dosen nacheinander prüfen – am Ende gibt es eine Übersicht.</p>
+      <div id="fcRun" class="hidden">
+        <div class="fc-count"><div><b id="fcN">0</b>geprüft</div><div class="g"><b id="fcG">0</b>freigegeben</div><div class="r"><b id="fcR">0</b>nicht frei</div></div>
+        <div class="list" id="fcList"></div>
+      </div>
+      <button class="btn light full" id="bFc" type="button">Fahrzeug-Check starten</button>
     </div>
 
     <div class="card">
@@ -359,6 +380,7 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
     </div>
     <div class="card">
       <h2>Einstellungen</h2>
+      <label class="switch"><span>Ton bei Ergebnis</span><input type="checkbox" id="optSound"></label>
       <label class="switch"><span>Verlauf speichern</span><input type="checkbox" id="optHist"></label>
       <label class="switch"><span>Gescannte Barcodes merken</span><input type="checkbox" id="optLearn"></label>
       <button class="btn danger full" id="bWipe" style="margin-top:12px">Alle gespeicherten Daten löschen</button>
@@ -466,7 +488,7 @@ const store = {
   set(k, v){ try { localStorage.setItem('gsc.' + k, JSON.stringify(v)); } catch {} if (typeof cloudSave === 'function') cloudSave(); }
 };
 const KEEP_DAYS = 30;
-let opts = Object.assign({ hist: true, learn: true }, store.get('opts', {}));
+let opts = Object.assign({ hist: true, learn: true, sound: true }, store.get('opts', {}));
 let learned = store.get('learned', {});   // Barcode -> Artikelnummer (keine personenbezogenen Daten)
 let history = store.get('history', []).filter(h => Date.now() - h.t < KEEP_DAYS * 864e5);
 store.set('history', history);
@@ -619,7 +641,9 @@ function analyze(text){
 }
 const sureHits = text => analyze(text).sure;
 
+let lastVia = '';
 function check(raw, via){
+  lastVia = via || '';
   if (expired()){ LISTE = null; BASE = []; STAND = '–'; store.set('liste', null); edits = { added: [], removed: [] }; store.set('edits', edits); rebuild(); }
   if (!LISTE && !edits.added.length){
     stopScan();
@@ -661,6 +685,41 @@ function showPicks(keys, via){
   $('#picks').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+let audio = null;
+function unlockAudio(){ try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume(); } catch {} }
+document.addEventListener('pointerdown', unlockAudio, { capture: true });
+function beep(kind){
+  if (!opts.sound || !audio) return;
+  const seq = kind === 'ok' ? [[880, .09], [1320, .14]] : kind === 'no' ? [[220, .28], [180, .32]] : [[600, .15]];
+  let t = audio.currentTime + .02;
+  for (const [f, d] of seq){
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = kind === 'no' ? 'square' : 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.25, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + d + .02); t += d + .05;
+  }
+}
+// Fahrzeug-Check: alle Ergebnisse einer Runde sammeln (je Artikel einmal)
+let fc = null;
+function record(e){
+  addHistory(e);
+  if (!fc) return;
+  const k = norm(e.a);
+  fc.set(k, { ...e, t: Date.now() });
+  renderFc();
+}
+function renderFc(){
+  const run = !!fc;
+  $('#fcRun').classList.toggle('hidden', !run);
+  $('#fcSub').classList.toggle('hidden', run);
+  $('#bFc').textContent = run ? 'Check beenden & Übersicht' : 'Fahrzeug-Check starten';
+  $('#bFc').className = 'btn full ' + (run ? 'primary' : 'light');
+  if (!run) return;
+  const v = [...fc.values()].reverse();
+  $('#fcN').textContent = v.length; $('#fcG').textContent = v.filter(x => x.r === 'ok').length; $('#fcR').textContent = v.filter(x => x.r !== 'ok').length;
+  $('#fcList').innerHTML = v.slice(0, 6).map(fcRow).join('') + (v.length > 6 ? `<div class="empty" style="padding:8px">… und ${v.length - 6} weitere</div>` : '');
+}
+const fcRow = x => `<div class="row" style="cursor:default"><div class="badge ${x.r}">${x.r === 'ok' ? ICON_OK : x.r === 'warn' ? ICON_Q : ICON_NO}</div><div class="t"><div class="a">${esc(x.n)}</div><div class="n">${esc(x.a)}</div></div></div>`;
 function openResult(kind, verdict, why, html, nextLabel){
   const res = $('#result');
   res.className = 'result on ' + kind;
@@ -670,12 +729,37 @@ function openResult(kind, verdict, why, html, nextLabel){
   $('#rBody').innerHTML = html;
   $('#bNext').textContent = nextLabel || 'Nächste Dose prüfen';
   res.querySelector('.body').scrollTop = 0;
+  if (kind !== 'info') beep(kind);
   if (kind !== 'info') try { navigator.vibrate && navigator.vibrate(kind === 'ok' ? 60 : [90, 60, 90]); } catch {}
 }
 function closeResult(){ $('#result').className = 'result'; }
 $('#bClose').addEventListener('click', closeResult);
-$('#bNext').addEventListener('click', () => { closeResult(); $('#picks').classList.add('hidden'); $('#manualIn').value = ''; });
+$('#bFc').addEventListener('click', () => {
+  if (!fc){ fc = new Map(); renderFc(); toast('Fahrzeug-Check läuft – jetzt Dosen prüfen'); return; }
+  const v = [...fc.values()], g = v.filter(x => x.r === 'ok').length, r = v.length - g;
+  fc = null; renderFc();
+  if (!v.length) return;
+  const bad = v.filter(x => x.r !== 'ok'), good = v.filter(x => x.r === 'ok');
+  openResult(r ? 'no' : 'ok', r ? `${r} von ${v.length} nicht freigegeben` : `Alle ${v.length} freigegeben`,
+    `Fahrzeug-Check vom ${new Date().toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
+    (bad.length ? `<div class="card"><p class="sec-h">Nicht freigegeben – aussortieren</p><div class="list">${bad.map(fcRow).join('')}</div></div>` : '')
+    + (good.length ? `<div class="card"><p class="sec-h">Freigegeben</p><div class="list">${good.map(fcRow).join('')}</div></div>` : ''),
+    'Fertig');
+});
+$('#bNext').addEventListener('click', () => { const again = fc && $('#bNext').textContent !== 'Fertig' && !window.claude && lastVia.startsWith('Barcode'); closeResult(); $('#picks').classList.add('hidden'); $('#manualIn').value = ''; if (again) startScan(); });
 
+const PSA = [
+  [/^P280/, '🧤', 'Schutz­handschuhe'], [/^P280/, '🥽', 'Schutzbrille'],
+  [/^P26[01]/, '😷', 'Dämpfe nicht einatmen'], [/^P271|^P304\+P340/, '🌬️', 'Nur gut belüftet'],
+  [/^P21[01]/, '🔥', 'Keine Zündquellen, nicht rauchen'], [/^P410/, '🌡️', 'Nicht über 50 °C, keine Sonne'],
+  [/^P273|^P391/, '🌱', 'Nicht in die Umwelt'], [/^P233|^P403/, '🔒', 'Dicht verschlossen lagern'],
+  [/^P264/, '🧼', 'Danach Hände waschen'], [/^P305/, '👁️', 'Augenspülung bereithalten']
+];
+function psaHtml(items){
+  const ps = items.flatMap(x => x.p || []), seen = new Set(), out = [];
+  for (const [re, ic, t] of PSA) if (!seen.has(t) && ps.some(p => re.test(p))){ seen.add(t); out.push(`<div><span aria-hidden="true">${ic}</span>${t}</div>`); }
+  return out.length ? `<div class="card"><p class="sec-h">Schutzmaßnahmen</p><div class="psa">${out.join('')}</div></div>` : '';
+}
 function itemHtml(items){
   const it = items[0];
   const multi = items.length > 1;
@@ -688,6 +772,7 @@ function itemHtml(items){
       ${it.sig ? `<span class="tag ${it.sig === 'Gefahr' ? 'gefahr' : 'achtung'}">${esc(it.sig)}</span>` : ''}
       ${it.custom ? `<span class="tag own">Selbst ergänzt ${new Date(it.t).toLocaleDateString('de-DE')}</span>` : ''}
     </div>${it.custom && it.note ? `<p class="sub" style="margin:10px 0 0">Notiz: ${esc(it.note)}</p>` : ''}</div>`;
+  html += psaHtml(items);
   if (it.custom) return html + `<div class="card"><p class="sub" style="margin:0">Selbst ergänztes Produkt – Gefahrensymbole und H-/P-Sätze bitte dem Sicherheitsdatenblatt entnehmen.</p></div>`;
   for (const x of items){
     if (multi) html += `<p class="sec-h" style="margin:18px 4px 8px">${esc((x.n.match(/Komponente [AB]/) || [''])[0])}</p>`;
@@ -707,7 +792,7 @@ function showItem(items, via, raw){
   stopScan();
   const it = items[0];
   openResult('ok', 'Freigegeben', it.list === 'G' ? 'Im Gefahrstoffverzeichnis gelistet' : 'Als chemisch-technisches Produkt gelistet', itemHtml(items));
-  addHistory({ a: it.a, n: it.n.replace(/\s*\(Komponente [AB]\)/, ''), r: 'ok', via });
+  record({ a: it.a, n: it.n.replace(/\s*\(Komponente [AB]\)/, ''), r: 'ok', via });
 }
 
 let pendingCode = null;
@@ -729,12 +814,12 @@ function showUnknown(raw, via){
       if (hits.length === 1 && pendingCode && opts.learn){ learned[pendingCode] = index.get(hits[0])[0].a; store.set('learned', learned); toast('Barcode gespeichert'); }
       check(a, 'Eingabe');
     });
-    addHistory({ a: raw, n: 'Barcode nicht freigegeben', r: 'no', via });
+    record({ a: raw, n: 'Barcode nicht freigegeben', r: 'no', via });
   } else {
     openResult('no', 'Nicht freigegeben', 'Nicht im Gefahrstoffverzeichnis – nicht verwenden.',
       `<div class="card"><dl class="kv"><dt>Geprüft</dt><dd>${esc(raw)}</dd><dt>Stand</dt><dd>${STAND}</dd></dl></div>
        <div class="card"><h2>Was tun?</h2><p class="sub" style="margin:0">Produkt nicht einsetzen. Nummer noch einmal mit dem Etikett vergleichen und im Zweifel bei der Arbeitssicherheit nachfragen.</p></div>`);
-    addHistory({ a: raw, n: 'Nicht im Verzeichnis', r: 'no', via });
+    record({ a: raw, n: 'Nicht im Verzeichnis', r: 'no', via });
   }
 }
 
@@ -866,6 +951,7 @@ async function startScan(){
   } catch { toast('Live-Kamera nicht verfügbar – bitte „Etikett-Foto“ nutzen.'); return; }
   const v = $('#video'); v.srcObject = stream; await v.play().catch(() => {});
   $('#cam').classList.add('live'); $('#bScan span').textContent = 'Stopp';
+  try { const tr = stream.getVideoTracks()[0]; if (tr.getCapabilities && tr.getCapabilities().torch) $('#bTorch').classList.remove('hidden'); } catch {}
   try { detector ||= await getDetector(); } catch (e) { toast(e.message); stopScan(); return; }
   const c = document.createElement('canvas'), ctx = c.getContext('2d', { willReadFrequently: true });
   let running = false;
@@ -883,8 +969,14 @@ function stopScan(){
   clearInterval(scanTimer); scanTimer = null;
   if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   $('#cam').classList.remove('live'); $('#bScan span').textContent = 'Scannen';
+  $('#bTorch').classList.add('hidden'); $('#bTorch').classList.remove('on');
 }
 $('#bScan').addEventListener('click', () => stream ? stopScan() : startScan());
+$('#bTorch').addEventListener('click', async () => {
+  const tr = stream?.getVideoTracks()[0]; if (!tr) return;
+  const on = !$('#bTorch').classList.contains('on');
+  try { await tr.applyConstraints({ advanced: [{ torch: on }] }); $('#bTorch').classList.toggle('on', on); } catch { toast('Licht wird auf diesem Gerät nicht unterstützt'); }
+});
 
 /* ---------- Etikett-Foto: erst Barcode, dann Texterkennung ---------- */
 $('#bPhoto').addEventListener('click', () => { stopScan(); $('#photoIn').value = ''; $('#photoIn').click(); });
@@ -1052,7 +1144,8 @@ $('#bClearHist').addEventListener('click', () => { history = []; store.set('hist
 
 /* ---------- Datenschutz-Einstellungen ---------- */
 $('#infoStand').textContent = STAND;
-$('#optHist').checked = opts.hist; $('#optLearn').checked = opts.learn;
+$('#optHist').checked = opts.hist; $('#optLearn').checked = opts.learn; $('#optSound').checked = opts.sound !== false;
+$('#optSound').addEventListener('change', e => { opts.sound = e.target.checked; store.set('opts', opts); unlockAudio(); if (opts.sound) beep('ok'); });
 $('#optHist').addEventListener('change', e => {
   opts.hist = e.target.checked; store.set('opts', opts);
   if (!opts.hist){ history = []; store.set('history', history); toast('Verlauf aus und gelöscht'); }
@@ -1064,7 +1157,7 @@ $('#optLearn').addEventListener('change', e => {
 $('#bWipe').addEventListener('click', async () => {
   if (!await ask('Geladene Liste, eigene Änderungen, Verlauf, gemerkte Barcodes und Einstellungen auf diesem Gerät löschen?', 'Alles löschen')) return;
   try { Object.keys(localStorage).filter(k => k.startsWith('gsc.')).forEach(k => localStorage.removeItem(k)); } catch {}
-  history = []; learned = {}; opts = { hist: true, learn: true };
+  history = []; learned = {}; opts = { hist: true, learn: true, sound: true };
   LISTE = null; BASE = []; STAND = '–';
   edits = { added: [], removed: [] }; rebuild(); renderEdits();
   if (cloudRef){ clearTimeout(cloudTimer); try { await cloudRef.delete(); } catch {} }
@@ -1095,7 +1188,7 @@ function applyState(d){
   edits = sanitizeEdits(d.edits);
   learned = {};
   if (d.learned && typeof d.learned === 'object') for (const [k, v] of Object.entries(d.learned).slice(0, 500)) if (norm(k) && norm(v)) learned[norm(k)] = str(v, 40);
-  opts = Object.assign({ hist: true, learn: true }, d.opts && typeof d.opts === 'object' ? { hist: d.opts.hist !== false, learn: d.opts.learn !== false } : {});
+  opts = Object.assign({ hist: true, learn: true }, d.opts && typeof d.opts === 'object' ? { hist: d.opts.hist !== false, learn: d.opts.learn !== false, sound: d.opts.sound !== false } : {});
   history = Array.isArray(d.history) ? d.history.filter(h => h && Date.now() - h.t < KEEP_DAYS * 864e5).slice(0, 100)
     .map(h => ({ t: Number(h.t), a: str(h.a, 60), n: str(h.n), r: ['ok', 'no', 'warn'].includes(h.r) ? h.r : 'no', via: str(h.via, 40) })) : [];
   try {
