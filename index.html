@@ -481,7 +481,7 @@ function sanitizeItem(x, custom){
     ghs: arr(x.ghs, /^0[1-9]$/), sig: ['Gefahr', 'Achtung'].includes(x.sig) ? x.sig : '',
     h: arr(x.h, /^(EUH|H)\d{3}$/), p: arr(x.p, /^P\d{3}(\+P\d{3})*$/),
     wgk: ['1', '2', '3', 'nwg'].includes(x.wgk) ? x.wgk : '', lgk: /^[0-9]{1,2}( ?[A-D])?$|^[0-9]\.[0-9][A-D]?$/.test(str(x.lgk)) ? str(x.lgk) : '',
-    src: x.src === 'F' ? 'F' : 'W'
+    src: x.src === 'F' ? 'F' : 'W', e: /^\d{8,14}$/.test(str(x.e)) ? str(x.e) : ''
   };
   if (custom || x.custom){ it.custom = true; it.t = Number(x.t) || Date.now(); it.note = str(x.note); }
   return it;
@@ -512,7 +512,7 @@ function rebuild(){
   const rm = new Set(edits.removed);
   ITEMS = BASE.filter(it => !rm.has(norm(it.a))).concat(edits.added);
   index.clear();
-  for (const it of ITEMS) for (const k of [norm(it.a), norm(it.m)]) if (k) { if (!index.has(k)) index.set(k, []); index.get(k).push(it); }
+  for (const it of ITEMS) for (const k of [norm(it.a), norm(it.m), norm(it.e)]) if (k) { if (!index.has(k)) index.set(k, []); index.get(k).push(it); }
   const nAdd = edits.added.length, nRm = edits.removed.length;
   $('.chip .dot').classList.toggle('off', !LISTE);
   $('#chipText').textContent = !LISTE ? 'Noch keine Liste geladen – unter „Verzeichnis“ laden'
