@@ -663,6 +663,14 @@ function applyTheme(t){
 applyTheme(store.get('theme', ''));
 $('#bTheme').addEventListener('click', () => { const t = isDark() ? 'light' : 'dark'; store.set('theme', t); applyTheme(t); });
 
+/* ---------- Notrufnummern: nur nach Bestätigung wählen ---------- */
+document.addEventListener('click', async e => {
+  const a = e.target.closest('.sos a'); if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  const nr = a.firstChild.textContent.trim(), wer = a.querySelector('small')?.textContent || '';
+  if (await ask(`${nr} – ${wer}\n\nWirklich jetzt anrufen?`, 'Jetzt anrufen')) location.href = a.getAttribute('href');
+}, true);
+
 /* ---------- Navigation ---------- */
 function go(v){
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.v === v));
