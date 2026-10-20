@@ -202,6 +202,13 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
 .sos a small{font-size:11.5px;font-weight:650;opacity:.85}
 .sos .s1{background:var(--no);color:#fff}
 .sos .s2{background:var(--surface-2);color:var(--text)}
+.pick{margin-top:6px;max-height:156px;overflow-y:auto;border:1.5px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch}
+.pick:empty{display:none}
+.pick div{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+.pick div:last-child{border-bottom:0}
+.pick .use{flex:1;min-width:0;text-align:left;border:0;background:none;padding:11px 12px;font-size:15px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick .use.sel{font-weight:750;color:var(--accent)}
+.pick .del{flex:none;border:0;background:none;color:var(--muted);font-size:20px;width:44px;height:42px;cursor:pointer}
 .fc-count{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 10px}
 .fc-count div{background:var(--surface-2);border-radius:12px;padding:10px;text-align:center;font-size:12.5px;color:var(--muted)}
 .fc-count b{display:block;font-size:24px;color:var(--text);font-variant-numeric:tabular-nums}
@@ -385,7 +392,7 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
         <li><b>Kamera &amp; Fotos</b> werden nur im Moment der Prüfung auf dem Handy ausgewertet und nicht gespeichert.</li>
         <li><b>Keine Konten, keine Cookies, kein Tracking</b>, keine Werbung, keine Analyse-Dienste.</li>
         <li><b>Keine Drittanbieter:</b> Scanner und Texterkennung sind in der App enthalten und werden nicht von fremden Servern geladen.</li>
-        <li><b>Keine personenbezogenen Daten:</b> Geprüft werden nur Artikelnummern von Produkten.</li>
+        <li><b>Techniker-Namen und Kennzeichen</b> (für das PDF) werden nur auf diesem Gerät bzw. in deinem privaten Claude-Bereich gespeichert und landen nur im PDF, wenn du es selbst verschickst. Einzeln mit × oder unten komplett löschbar.</li>
         <li><b>Lokaler Speicher:</b> Verlauf (max. 30 Tage), gemerkte Barcodes und eigene Änderungen am Verzeichnis liegen nur im Browser dieses Geräts und lassen sich hier jederzeit löschen.</li>
         <li><b>In der Claude-Version</b> wird der Stand zusätzlich in einem privaten Bereich deines Claude-Kontos gesichert, den nur du lesen kannst – damit die Liste nach dem Schließen nicht verloren geht. „Alle gespeicherten Daten löschen“ entfernt auch diese Kopie.</li>
         <li><b>Weitergeben</b> erstellt eine Datei nur mit Artikelnummern und Bezeichnungen – du entscheidest selbst, an wen du sie schickst.</li>
@@ -503,6 +510,7 @@ const store = {
 };
 const KEEP_DAYS = 30;
 let opts = Object.assign({ hist: true, learn: true, sound: true }, store.get('opts', {}));
+let saved = Object.assign({ tech: [], car: [] }, store.get('saved', {}));   // eigene Eingaben (nur dieses Gerät/Konto)
 let learned = store.get('learned', {});   // Barcode -> Artikelnummer (keine personenbezogenen Daten)
 let history = store.get('history', []).filter(h => Date.now() - h.t < KEEP_DAYS * 864e5);
 store.set('history', history);
@@ -748,7 +756,35 @@ function openResult(kind, verdict, why, html, nextLabel){
 }
 function closeResult(){ $('#result').className = 'result'; }
 $('#bClose').addEventListener('click', closeResult);
-async function fcPdf(v, car){
+function pickerHtml(key, label, ph){
+  return `<label class="f" for="pk-${key}">${label}</label>
+    <input class="in" id="pk-${key}" autocomplete="off" placeholder="${ph}">
+    <div class="pick" id="pl-${key}"></div>`;
+}
+function wirePicker(key){
+  const inp = $('#pk-' + key), list = $('#pl-' + key);
+  const draw = (filter) => {
+    const q = filter ? inp.value.trim().toLowerCase() : '';
+    list.innerHTML = saved[key].filter(x => !q || x.toLowerCase().includes(q) || x.toLowerCase() === q)
+      .map(x => `<div><button type="button" class="use${x === inp.value.trim() ? ' sel' : ''}" data-v="${esc(x)}">${esc(x)}</button><button type="button" class="del" data-d="${esc(x)}" aria-label="${esc(x)} löschen">×</button></div>`).join('');
+  };
+  inp.value = saved[key][0] || '';
+  inp.addEventListener('input', () => draw(true));
+  inp.addEventListener('focus', () => { if (inp.value && saved[key].includes(inp.value)) { inp.select(); } });
+  list.addEventListener('click', e => {
+    const u = e.target.closest('.use'), d = e.target.closest('.del');
+    if (u){ inp.value = u.dataset.v; draw(); }
+    if (d){ saved[key] = saved[key].filter(x => x !== d.dataset.d); store.set('saved', saved); if (inp.value === d.dataset.d) inp.value = ''; draw(); }
+  });
+  draw();
+  return () => inp.value.trim();
+}
+function remember(key, val){
+  if (!val) return;
+  saved[key] = [val, ...saved[key].filter(x => x !== val)].slice(0, 40);
+  store.set('saved', saved);
+}
+async function fcPdf(v, tech, car){
   try {
     if (!window.jspdf) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'lib/jspdf.umd.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
     const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -757,7 +793,7 @@ async function fcPdf(v, car){
     let y = 20;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Fahrzeug-Check Gefahrstoffe', 15, y); y += 8;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
-    doc.text(`Datum: ${when}` + (car ? `    Fahrzeug: ${car}` : ''), 15, y); y += 5.5;
+    doc.text(`Datum: ${when}` + (tech ? `    Techniker: ${tech}` : '') + (car ? `    Kennzeichen: ${car}` : ''), 15, y); y += 5.5;
     doc.text(`Freigabeliste Stand: ${STAND}    Geprüft: ${v.length}    Freigegeben: ${good.length}    Nicht freigegeben: ${bad.length}`, 15, y); y += 9;
     const section = (title, rows, color) => {
       if (!rows.length) return;
@@ -777,11 +813,12 @@ async function fcPdf(v, car){
     if (y > 262){ doc.addPage(); y = 20; }
     y = Math.max(y + 6, 255);
     doc.setDrawColor(120); doc.line(15, y, 90, y); doc.line(115, y, 195, y);
+    if (tech){ doc.setFontSize(10.5); doc.text(tech, 15, y - 2); }
     doc.setFontSize(9); doc.text('Geprüft von', 15, y + 4.5); doc.text('Unterschrift', 115, y + 4.5);
     doc.setFontSize(8); doc.setTextColor(120);
     doc.text('Erstellt mit Gefahrstoff-Check (Hilfsmittel). Maßgeblich sind das aktuelle Gefahrstoffverzeichnis und das Sicherheitsdatenblatt.', 15, 290);
     const blob = doc.output('blob'), stamp = now.toISOString().slice(0, 16).replace(/[-:T]/g, '');
-    const name = `Fahrzeug-Check-${(car || 'Fahrzeug').replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 30)}-${stamp}.pdf`;
+    const name = `Fahrzeug-Check-${(car || tech || 'Fahrzeug').replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 30)}-${stamp}.pdf`;
     const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
     if (dl){ try { await dl.save({ filename: name, data: blob }); toast('PDF gespeichert'); } catch (e){ if (e?.code !== 'declined') toast('Speichern ist hier gerade nicht möglich.'); } return; }
     const file = new File([blob], name, { type: 'application/pdf' });
@@ -801,11 +838,13 @@ $('#bFc').addEventListener('click', () => {
     `Fahrzeug-Check vom ${new Date().toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
     (bad.length ? `<div class="card"><p class="sec-h">Nicht freigegeben – aussortieren</p><div class="list">${bad.map(fcRow).join('')}</div></div>` : '')
     + (good.length ? `<div class="card"><p class="sec-h">Freigegeben</p><div class="list">${good.map(fcRow).join('')}</div></div>` : '')
-    + `<div class="card"><h2>Als PDF verschicken</h2><label class="f" for="fcCar">Fahrzeug / Kennzeichen (optional)</label>
-       <input class="in" id="fcCar" autocomplete="off" placeholder="z. B. Servicewagen 3">
-       <button class="btn primary full" id="bFcPdf" type="button" style="margin-top:10px">PDF erstellen &amp; verschicken</button></div>`,
+    + `<div class="card"><h2>Als PDF verschicken</h2>
+       ${pickerHtml('tech', 'Techniker', 'Name eingeben oder unten auswählen')}
+       ${pickerHtml('car', 'Kennzeichen / Fahrzeug', 'z. B. BB-GZ 123')}
+       <button class="btn primary full" id="bFcPdf" type="button" style="margin-top:14px">PDF erstellen &amp; verschicken</button></div>`,
     'Fertig');
-  $('#bFcPdf').onclick = () => fcPdf(v, $('#fcCar').value.trim());
+  const getTech = wirePicker('tech'), getCar = wirePicker('car');
+  $('#bFcPdf').onclick = () => { const t = getTech(), c = getCar(); remember('tech', t); remember('car', c); fcPdf(v, t, c); };
 });
 $('#bNext').addEventListener('click', () => { const again = fc && $('#bNext').textContent !== 'Fertig' && !window.claude && lastVia.startsWith('Barcode'); closeResult(); $('#picks').classList.add('hidden'); $('#manualIn').value = ''; if (again) startScan(); });
 
@@ -1232,7 +1271,7 @@ $('#optLearn').addEventListener('change', e => {
 $('#bWipe').addEventListener('click', async () => {
   if (!await ask('Geladene Liste, eigene Änderungen, Verlauf, gemerkte Barcodes und Einstellungen auf diesem Gerät löschen?', 'Alles löschen')) return;
   try { Object.keys(localStorage).filter(k => k.startsWith('gsc.')).forEach(k => localStorage.removeItem(k)); } catch {}
-  history = []; learned = {}; opts = { hist: true, learn: true, sound: true };
+  history = []; learned = {}; saved = { tech: [], car: [] }; opts = { hist: true, learn: true, sound: true };
   LISTE = null; BASE = []; STAND = '–';
   edits = { added: [], removed: [] }; rebuild(); renderEdits();
   if (cloudRef){ clearTimeout(cloudTimer); try { await cloudRef.delete(); } catch {} }
@@ -1253,7 +1292,7 @@ async function cloudWrite(){
   if (!cloudRef) return;
   if (cloudBusy){ cloudAgain = true; return; }
   cloudBusy = true;
-  try { await cloudRef.set({ v: 1, liste: LISTE, edits, learned, opts, history, gespeichert: Date.now() }); }
+  try { await cloudRef.set({ v: 1, liste: LISTE, edits, learned, opts, history, saved, gespeichert: Date.now() }); }
   catch (e){ if (e?.code === 'unavailable') setTimeout(cloudSave, 1500 + Math.random() * 1000); }
   cloudBusy = false;
   if (cloudAgain){ cloudAgain = false; cloudSave(); }
@@ -1261,6 +1300,9 @@ async function cloudWrite(){
 function applyState(d){
   LISTE = sanitizeList(d.liste); BASE = LISTE ? LISTE.items : []; STAND = LISTE ? LISTE.stand : '–';
   edits = sanitizeEdits(d.edits);
+  saved = { tech: [], car: [] };
+  if (d.saved && typeof d.saved === 'object') for (const k of ['tech', 'car']) if (Array.isArray(d.saved[k])) saved[k] = d.saved[k].map(x => str(x, 60)).filter(Boolean).slice(0, 40);
+  try { localStorage.setItem('gsc.saved', JSON.stringify(saved)); } catch {}
   learned = {};
   if (d.learned && typeof d.learned === 'object') for (const [k, v] of Object.entries(d.learned).slice(0, 500)) if (norm(k) && norm(v)) learned[norm(k)] = str(v, 40);
   opts = Object.assign({ hist: true, learn: true }, d.opts && typeof d.opts === 'object' ? { hist: d.opts.hist !== false, learn: d.opts.learn !== false, sound: d.opts.sound !== false } : {});
