@@ -489,9 +489,12 @@ function sanitizeItem(x, custom){
 function sanitizeList(l){
   if (!l || typeof l !== 'object' || !Array.isArray(l.items)) return null;
   const items = l.items.slice(0, 2000).map(x => sanitizeItem(x)).filter(Boolean);
-  return items.length ? { stand: str(l.stand, 20) || '–', items } : null;
+  const bis = Number(l.gueltigBis) || 0;
+  return items.length ? { stand: str(l.stand, 20) || '–', items, ...(bis ? { gueltigBis: bis } : {}) } : null;
 }
 let LISTE = sanitizeList(store.get('liste', null));   // geladene Liste (nur auf diesem Gerät)
+function expired(){ return !!(LISTE && LISTE.gueltigBis && Date.now() > LISTE.gueltigBis); }
+if (expired()){ LISTE = null; store.set('liste', null); setTimeout(() => toast('Testzeitraum abgelaufen – Liste wurde entfernt'), 800); }
 let STAND = LISTE ? LISTE.stand : '–';
 let BASE = LISTE ? LISTE.items : [];
 
@@ -517,6 +520,7 @@ function rebuild(){
   $('.chip .dot').classList.toggle('off', !LISTE);
   $('#chipText').textContent = !LISTE ? 'Noch keine Liste geladen – unter „Verzeichnis“ laden'
     : `Liste Stand ${STAND} · ${ITEMS.length} Produkte freigegeben`
+      + (LISTE.gueltigBis ? ` · Test gültig bis ${new Date(LISTE.gueltigBis).toLocaleDateString('de-DE')}` : '')
       + (nAdd || nRm ? ` · eigene Änderungen: ${[nAdd && '+' + nAdd, nRm && '−' + nRm].filter(Boolean).join(' / ')}` : '');
   $('#infoStand') && ($('#infoStand').textContent = STAND);
 }
@@ -547,6 +551,21 @@ function ask(msg, yes = 'OK'){
     box.hidden = false; $('#askYes').focus();
     const done = v => { box.hidden = true; $('#askYes').onclick = $('#askNo').onclick = null; res(v); };
     $('#askYes').onclick = () => done(true); $('#askNo').onclick = () => done(false);
+  });
+}
+function choose(msg, options){
+  return new Promise(res => {
+    const box = $('#ask'), row = box.querySelector('.btnrow'), keep = row.innerHTML;
+    $('#askText').textContent = msg;
+    row.style.gridTemplateColumns = '1fr';
+    row.innerHTML = options.map((o, i) => `<button class="btn ${i === 0 ? 'primary' : 'light'}" type="button" data-i="${i}">${esc(o[0])}</button>`).join('')
+      + '<button class="btn light" type="button" data-i="-1">Abbrechen</button>';
+    box.hidden = false;
+    row.onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      box.hidden = true; row.onclick = null; row.innerHTML = keep; row.style.gridTemplateColumns = '';
+      const i = +b.dataset.i; res(i < 0 ? null : options[i][1]);
+    };
   });
 }
 function busy(on, text){ $('#busy').classList.toggle('on', on); if (text) $('#busyText').textContent = text; }
@@ -601,6 +620,7 @@ function analyze(text){
 const sureHits = text => analyze(text).sure;
 
 function check(raw, via){
+  if (expired()){ LISTE = null; BASE = []; STAND = '–'; store.set('liste', null); edits = { added: [], removed: [] }; store.set('edits', edits); rebuild(); }
   if (!LISTE && !edits.added.length){
     stopScan();
     openResult('warn', 'Keine Liste geladen', 'Ohne Liste kann nichts geprüft werden.',
@@ -985,9 +1005,13 @@ $('#bReset').addEventListener('click', async () => {
 // Weitergeben: Datei mit der aktuellen Liste inkl. eigener Änderungen (keine personenbezogenen Daten)
 $('#bExport').addEventListener('click', async () => {
   if (!ITEMS.length){ toast('Noch keine Liste zum Weitergeben.'); return; }
+  const days = await choose('Wie lange soll die Liste beim Empfänger gelten? Danach wird sie dort automatisch gelöscht.',
+    [['7 Tage (Test)', 7], ['30 Tage', 30], ['Unbegrenzt', 0]]);
+  if (days === null) return;
   const today = new Date().toISOString().slice(0, 10);
-  const data = JSON.stringify({ app: 'gefahrstoff-check', typ: 'liste', stand: STAND, exportiert: today, items: ITEMS }, null, 1);
-  const file = new File([data], `gefahrstoff-liste-${today}.json`, { type: 'application/json' });
+  const bis = days ? new Date(new Date().setHours(23, 59, 59, 0) + days * 864e5).getTime() : 0;
+  const data = JSON.stringify({ app: 'gefahrstoff-check', typ: 'liste', stand: STAND, exportiert: today, ...(bis ? { gueltigBis: bis } : {}), items: ITEMS }, null, 1);
+  const file = new File([data], `gefahrstoff-liste-${today}${days ? '-test-' + days + 'tage' : ''}.json`, { type: 'application/json' });
   const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
   if (dl){
     try { await dl.save({ filename: file.name, data }); toast('Liste gespeichert – jetzt per AirDrop oder Mail weitergeben'); }
@@ -1009,7 +1033,7 @@ $('#importIn').addEventListener('change', async e => {
     if (raw.app !== 'gefahrstoff-check' || raw.typ !== 'liste') throw new Error();
     const inc = sanitizeList(raw); if (!inc) throw new Error();
     const hint = edits.added.length || edits.removed.length ? '\n\nDeine bisherigen eigenen Änderungen werden dabei verworfen.' : '';
-    if (!await ask(`Liste laden?\n\nStand ${inc.stand} · ${inc.items.length} freigegebene Produkte${raw.exportiert ? '\n(weitergegeben am ' + str(raw.exportiert, 10) + ')' : ''}${LISTE ? '\n\nDie bisherige Liste wird ersetzt.' : ''}${hint}`, 'Liste laden')) return;
+    if (!await ask(`Liste laden?\n\nStand ${inc.stand} · ${inc.items.length} freigegebene Produkte${raw.exportiert ? '\n(weitergegeben am ' + str(raw.exportiert, 10) + ')' : ''}${inc.gueltigBis ? '\nGültig bis ' + new Date(inc.gueltigBis).toLocaleDateString('de-DE') : ''}${LISTE ? '\n\nDie bisherige Liste wird ersetzt.' : ''}${hint}`, 'Liste laden')) return;
     LISTE = inc; BASE = inc.items; STAND = inc.stand; store.set('liste', LISTE);
     edits = { added: [], removed: [] }; saveEdits(); toast('Liste geladen');
   } catch { toast('Keine gültige Gefahrstoff-Liste.'); }
