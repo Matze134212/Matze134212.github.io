@@ -33,7 +33,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.4); color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+html,body{margin:0;background:var(--brand);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
 html{background:var(--brand)}
 body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area-inset-top,0px);background:var(--brand);z-index:45}
 body{min-height:100dvh;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
@@ -51,7 +51,7 @@ header{background:linear-gradient(160deg,var(--brand) 0%,var(--brand-2) 100%);co
 .chip .dot{width:8px;height:8px;border-radius:50%;background:#4ade80;flex:none;box-shadow:0 0 0 3px rgba(74,222,128,.2)}
 .chip .dot.off{background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.25)}
 
-main{padding-top:16px}
+main{padding-top:16px;background:var(--bg);min-height:calc(100dvh - 140px);box-shadow:0 0 0 100vmax var(--bg);clip-path:inset(0 -100vmax -100vmax)}
 .view{display:none}
 .view.active{display:block}
 .card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
@@ -97,7 +97,8 @@ main{padding-top:16px}
 .note{font-size:12.5px;color:var(--muted);margin:2px 4px 18px}
 
 /* Ergebnis / Detail */
-.result{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;background:var(--bg)}
+.result{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;background:var(--brand)}
+.result .body{background:var(--bg)}
 .result.on{display:flex}
 .result .top{flex:none;padding:calc(22px + env(safe-area-inset-top)) 20px 26px;color:#fff;text-align:center;position:relative}
 .result.ok .top{background:var(--ok)}
