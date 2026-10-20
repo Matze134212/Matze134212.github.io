@@ -193,6 +193,15 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
 .torch{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;display:grid;place-items:center;cursor:pointer;z-index:2}
 .torch.on{background:#facc15;color:#111}
 .torch svg{width:22px;height:22px}
+.aid{display:grid;gap:8px}
+.aid div{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.4}
+.aid span{font-size:22px;line-height:1.1;flex:none}
+.aid b{display:block}
+.sos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.sos a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;border-radius:14px;text-decoration:none;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums}
+.sos a small{font-size:11.5px;font-weight:650;opacity:.85}
+.sos .s1{background:var(--no);color:#fff}
+.sos .s2{background:var(--surface-2);color:var(--text)}
 .fc-count{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 10px}
 .fc-count div{background:var(--surface-2);border-radius:12px;padding:10px;text-align:center;font-size:12.5px;color:var(--muted)}
 .fc-count b{display:block;font-size:24px;color:var(--text);font-variant-numeric:tabular-nums}
@@ -280,6 +289,11 @@ select.in{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50
         <p><b>Live-Scan:</b> Knopf „Live-Scan“ tippen, dann in der Tastatur auf das Symbol <b>„Text scannen“</b> (eckige Klammern mit Linien) – oder ins Feld tippen und lange drücken → „Text scannen“. Kamera auf die Artikelnummer halten und <b>„Einsetzen“</b> tippen. Die App prüft dann automatisch.</p>
         <p><b>Handscanner:</b> Bluetooth-Barcodescanner mit dem iPhone koppeln und einfach scannen – die App erkennt den Code automatisch und prüft sofort. <span id="scanState"></span></p>
       </div>
+    </div>
+    <div class="card">
+      <h2>Notfall</h2>
+      <p class="sub" style="margin:0">Bei Unfall mit einem Gefahrstoff: Dose bzw. Etikett zum Arzt mitnehmen.</p>
+      <div class="sos"><a class="s1" href="tel:112">112<small>Notruf</small></a><a class="s2" href="tel:08919240">089 19240<small>Giftnotruf München</small></a></div>
     </div>
     <p class="note">Hilfsmittel für den Außendienst. Maßgeblich bleiben das aktuelle Gefahrstoffverzeichnis und das Sicherheitsdatenblatt.</p>
   </section>
@@ -734,6 +748,49 @@ function openResult(kind, verdict, why, html, nextLabel){
 }
 function closeResult(){ $('#result').className = 'result'; }
 $('#bClose').addEventListener('click', closeResult);
+async function fcPdf(v, car){
+  try {
+    if (!window.jspdf) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'lib/jspdf.umd.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+    const { jsPDF } = window.jspdf, doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const now = new Date(), when = now.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const bad = v.filter(x => x.r !== 'ok'), good = v.filter(x => x.r === 'ok');
+    let y = 20;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Fahrzeug-Check Gefahrstoffe', 15, y); y += 8;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+    doc.text(`Datum: ${when}` + (car ? `    Fahrzeug: ${car}` : ''), 15, y); y += 5.5;
+    doc.text(`Freigabeliste Stand: ${STAND}    Geprüft: ${v.length}    Freigegeben: ${good.length}    Nicht freigegeben: ${bad.length}`, 15, y); y += 9;
+    const section = (title, rows, color) => {
+      if (!rows.length) return;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...color); doc.text(title, 15, y); doc.setTextColor(0); y += 6;
+      doc.setFontSize(9.5); doc.text('Art.-Nr.', 15, y); doc.text('Bezeichnung', 52, y); doc.text('Erkannt per', 160, y); y += 1.5;
+      doc.setDrawColor(180); doc.line(15, y, 195, y); y += 4.5; doc.setFont('helvetica', 'normal');
+      for (const x of rows){
+        if (y > 280){ doc.addPage(); y = 20; }
+        doc.text(String(x.a).slice(0, 22), 15, y);
+        doc.text(doc.splitTextToSize(String(x.n), 104)[0], 52, y);
+        doc.text(String(x.via || '').slice(0, 24), 160, y); y += 5.5;
+      }
+      y += 4;
+    };
+    section('Nicht freigegeben – aussortieren', bad, [200, 30, 30]);
+    section('Freigegeben', good, [17, 120, 70]);
+    if (y > 262){ doc.addPage(); y = 20; }
+    y = Math.max(y + 6, 255);
+    doc.setDrawColor(120); doc.line(15, y, 90, y); doc.line(115, y, 195, y);
+    doc.setFontSize(9); doc.text('Geprüft von', 15, y + 4.5); doc.text('Unterschrift', 115, y + 4.5);
+    doc.setFontSize(8); doc.setTextColor(120);
+    doc.text('Erstellt mit Gefahrstoff-Check (Hilfsmittel). Maßgeblich sind das aktuelle Gefahrstoffverzeichnis und das Sicherheitsdatenblatt.', 15, 290);
+    const blob = doc.output('blob'), stamp = now.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    const name = `Fahrzeug-Check-${(car || 'Fahrzeug').replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 30)}-${stamp}.pdf`;
+    const dl = window.claude?.use ? await window.claude.use('downloads').catch(() => null) : null;
+    if (dl){ try { await dl.save({ filename: name, data: blob }); toast('PDF gespeichert'); } catch (e){ if (e?.code !== 'declined') toast('Speichern ist hier gerade nicht möglich.'); } return; }
+    const file = new File([blob], name, { type: 'application/pdf' });
+    try { if (navigator.canShare && navigator.canShare({ files: [file] })){ await navigator.share({ files: [file], title: 'Fahrzeug-Check' }); return; } }
+    catch (e){ if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch { toast('PDF konnte nicht erstellt werden.'); }
+}
 $('#bFc').addEventListener('click', () => {
   if (!fc){ fc = new Map(); renderFc(); toast('Fahrzeug-Check läuft – jetzt Dosen prüfen'); return; }
   const v = [...fc.values()], g = v.filter(x => x.r === 'ok').length, r = v.length - g;
@@ -743,8 +800,12 @@ $('#bFc').addEventListener('click', () => {
   openResult(r ? 'no' : 'ok', r ? `${r} von ${v.length} nicht freigegeben` : `Alle ${v.length} freigegeben`,
     `Fahrzeug-Check vom ${new Date().toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`,
     (bad.length ? `<div class="card"><p class="sec-h">Nicht freigegeben – aussortieren</p><div class="list">${bad.map(fcRow).join('')}</div></div>` : '')
-    + (good.length ? `<div class="card"><p class="sec-h">Freigegeben</p><div class="list">${good.map(fcRow).join('')}</div></div>` : ''),
+    + (good.length ? `<div class="card"><p class="sec-h">Freigegeben</p><div class="list">${good.map(fcRow).join('')}</div></div>` : '')
+    + `<div class="card"><h2>Als PDF verschicken</h2><label class="f" for="fcCar">Fahrzeug / Kennzeichen (optional)</label>
+       <input class="in" id="fcCar" autocomplete="off" placeholder="z. B. Servicewagen 3">
+       <button class="btn primary full" id="bFcPdf" type="button" style="margin-top:10px">PDF erstellen &amp; verschicken</button></div>`,
     'Fertig');
+  $('#bFcPdf').onclick = () => fcPdf(v, $('#fcCar').value.trim());
 });
 $('#bNext').addEventListener('click', () => { const again = fc && $('#bNext').textContent !== 'Fertig' && !window.claude && lastVia.startsWith('Barcode'); closeResult(); $('#picks').classList.add('hidden'); $('#manualIn').value = ''; if (again) startScan(); });
 
@@ -760,6 +821,20 @@ function psaHtml(items){
   for (const [re, ic, t] of PSA) if (!seen.has(t) && ps.some(p => re.test(p))){ seen.add(t); out.push(`<div><span aria-hidden="true">${ic}</span>${t}</div>`); }
   return out.length ? `<div class="card"><p class="sec-h">Schutzmaßnahmen</p><div class="psa">${out.join('')}</div></div>` : '';
 }
+function aidHtml(items){
+  const h = items.flatMap(x => x.h || []), p = items.flatMap(x => x.p || []);
+  const has = (hs, ps) => h.some(x => hs.includes(x)) || p.some(x => ps.some(re => re.test(x)));
+  const rows = [];
+  if (has(['H314', 'H318', 'H319'], [/^P305/])) rows.push(['👁️', 'Augen', 'Sofort mehrere Minuten mit Wasser spülen, Kontaktlinsen entfernen, weiter spülen. Bei ätzenden Stoffen sofort Arzt.']);
+  if (has(['H314', 'H315', 'H317', 'EUH066'], [/^P30[23]/, /^P333/, /^P362/])) rows.push(['✋', 'Haut', 'Verschmutzte Kleidung ausziehen, Haut gründlich mit Wasser abwaschen. Bei Ausschlag Arzt.']);
+  if (has(['H335', 'H336', 'H304'], [/^P304/])) rows.push(['🌬️', 'Eingeatmet', 'An die frische Luft bringen, ruhig lagern. Bei Beschwerden Arzt oder Giftnotruf.']);
+  rows.push(has(['H304', 'H314'], [/^P301/])
+    ? ['🚫', 'Verschluckt', 'Mund ausspülen, KEIN Erbrechen herbeiführen – sofort Notruf oder Giftnotruf.']
+    : ['🚰', 'Verschluckt', 'Mund ausspülen, Wasser in kleinen Schlucken trinken, Giftnotruf anrufen.']);
+  if (has(['H222', 'H223', 'H225', 'H226', 'H229'], [])) rows.push(['🔥', 'Brand', 'Dose kann bersten – Abstand halten, Bereich räumen, Feuerwehr 112.']);
+  return `<div class="card"><p class="sec-h">Erste Hilfe</p><div class="aid">${rows.map(([i, t, d]) => `<div><span aria-hidden="true">${i}</span><div><b>${t}</b>${d}</div></div>`).join('')}</div>
+    <div class="sos"><a class="s1" href="tel:112">112<small>Notruf</small></a><a class="s2" href="tel:08919240">089 19240<small>Giftnotruf München</small></a></div></div>`;
+}
 function itemHtml(items){
   const it = items[0];
   const multi = items.length > 1;
@@ -772,7 +847,7 @@ function itemHtml(items){
       ${it.sig ? `<span class="tag ${it.sig === 'Gefahr' ? 'gefahr' : 'achtung'}">${esc(it.sig)}</span>` : ''}
       ${it.custom ? `<span class="tag own">Selbst ergänzt ${new Date(it.t).toLocaleDateString('de-DE')}</span>` : ''}
     </div>${it.custom && it.note ? `<p class="sub" style="margin:10px 0 0">Notiz: ${esc(it.note)}</p>` : ''}</div>`;
-  html += psaHtml(items);
+  html += psaHtml(items) + aidHtml(items);
   if (it.custom) return html + `<div class="card"><p class="sub" style="margin:0">Selbst ergänztes Produkt – Gefahrensymbole und H-/P-Sätze bitte dem Sicherheitsdatenblatt entnehmen.</p></div>`;
   for (const x of items){
     if (multi) html += `<p class="sec-h" style="margin:18px 4px 8px">${esc((x.n.match(/Komponente [AB]/) || [''])[0])}</p>`;
