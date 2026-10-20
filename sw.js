@@ -1,6 +1,6 @@
 // Offline-Cache: nur eigene Dateien, keine externen Anfragen.
-const CACHE = 'gsc-v3';
-const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png', 'lib/zxing.min.js'];
+const CACHE = 'gsc-v4';
+const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png', 'lib/zxing.min.js', 'lib/jspdf.umd.min.js'];
 const LAZY = ['lib/tesseract.min.js', 'lib/worker.min.js', 'lib/core/tesseract-core-lstm.wasm.js', 'lib/core/tesseract-core-simd-lstm.wasm.js', 'lib/lang/eng.traineddata.b64.txt'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE).then(() => c.addAll(LAZY).catch(() => {}))).then(() => self.skipWaiting()));
