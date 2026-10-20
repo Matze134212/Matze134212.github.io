@@ -1,5 +1,5 @@
 // Offline-Cache: nur eigene Dateien, keine externen Anfragen.
-const CACHE = 'gsc-v4';
+const CACHE = 'gsc-v5';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png', 'lib/zxing.min.js', 'lib/jspdf.umd.min.js'];
 const LAZY = ['lib/tesseract.min.js', 'lib/worker.min.js', 'lib/core/tesseract-core-lstm.wasm.js', 'lib/core/tesseract-core-simd-lstm.wasm.js', 'lib/lang/eng.traineddata.b64.txt'];
 self.addEventListener('install', e => {
@@ -13,7 +13,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || u.origin !== location.origin) return;
   // index.html: erst Netz (für neue Verzeichnis-Stände), sonst Cache
   if (e.request.mode === 'navigate'){
-    e.respondWith(fetch(e.request).then(r => { const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); return r; })
+    e.respondWith(fetch(e.request.url, { cache: 'no-cache' }).then(r => { const c = r.clone(); caches.open(CACHE).then(x => x.put('index.html', c)); return r; })
       .catch(() => caches.match('index.html')));
     return;
   }
