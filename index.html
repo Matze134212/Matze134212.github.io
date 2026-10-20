@@ -696,12 +696,12 @@ function showUnknown(raw, via){
   const isCode = /^Barcode/.test(via || '');
   pendingCode = isCode ? norm(raw) : null;
   if (isCode){
-    openResult('warn', 'Barcode nicht zugeordnet', 'Der Code enthält keine bekannte Artikelnummer.',
-      `<div class="card"><dl class="kv"><dt>Gelesen</dt><dd>${esc(raw)}</dd></dl></div>
-       <div class="card"><h2>Artikelnummer zuordnen</h2>
-       <p class="sub">Artikelnummer vom Etikett eintippen. Die App merkt sich den Barcode für das nächste Mal.</p>
+    openResult('no', 'Nicht freigegeben', 'Barcode gehört zu keinem freigegebenen Produkt.',
+      `<div class="card"><dl class="kv"><dt>Barcode</dt><dd>${esc(raw)}</dd><dt>Stand</dt><dd>${STAND}</dd></dl></div>
+       <div class="card"><h2>Zur Sicherheit gegenprüfen</h2>
+       <p class="sub">Ältere Dosen können einen anderen Barcode haben. Artikelnummer vom Etikett („Art. …“) eintippen – ist sie freigegeben, merkt sich die App diesen Barcode.</p>
        <form class="manual" id="learnForm"><input id="learnIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="z. B. 0893 106"><button class="btn primary" type="submit">Prüfen</button></form></div>`,
-      'Abbrechen');
+      'Nächste Dose prüfen');
     $('#learnForm').addEventListener('submit', e => {
       e.preventDefault();
       const a = $('#learnIn').value.trim(); if (!a) return;
@@ -709,7 +709,7 @@ function showUnknown(raw, via){
       if (hits.length === 1 && pendingCode && opts.learn){ learned[pendingCode] = index.get(hits[0])[0].a; store.set('learned', learned); toast('Barcode gespeichert'); }
       check(a, 'Eingabe');
     });
-    addHistory({ a: raw, n: 'Barcode nicht zugeordnet', r: 'warn', via });
+    addHistory({ a: raw, n: 'Barcode nicht freigegeben', r: 'no', via });
   } else {
     openResult('no', 'Nicht freigegeben', 'Nicht im Gefahrstoffverzeichnis – nicht verwenden.',
       `<div class="card"><dl class="kv"><dt>Geprüft</dt><dd>${esc(raw)}</dd><dt>Stand</dt><dd>${STAND}</dd></dl></div>
