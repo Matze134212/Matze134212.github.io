@@ -1381,6 +1381,12 @@ function applyState(d){
   } catch {}
 })();
 
+/* ---------- Eigener Webspace: Live-Scanner vorhanden → iPhone-„Text scannen“ ausblenden ---------- */
+if (!window.claude?.use){
+  $('#bLive').classList.add('hidden');
+  const tip = [...document.querySelectorAll('.tips p')].find(x => x.textContent.startsWith('Live-Scan')); if (tip) tip.remove();
+}
+
 /* ---------- Claude-Seite: keine Live-Kamera, Foto-Funktion bleibt ---------- */
 if (window.claude?.use){
   $('#bScan').classList.add('hidden');
